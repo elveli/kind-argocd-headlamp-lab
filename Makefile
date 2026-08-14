@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 include versions.env
 export
 
-.PHONY: up down status pods deployments services ports urls argocd-password headlamp-token argocd-login sync verify logs help
+.PHONY: up down status pods deployments services ports describe urls argocd-password headlamp-token argocd-login sync verify logs help
 
 up: ## Bring up kind + ingress-nginx + Argo CD, apply the root Application
 	@./scripts/bootstrap.sh
@@ -42,6 +42,9 @@ ports: ## Show the host -> kind node -> ingress-nginx -> Ingress route port chai
 	@kubectl -n ingress-nginx get svc ingress-nginx-controller -o wide 2>/dev/null || true
 	@echo "--- ingress routes ---"
 	@kubectl get ingress -A 2>/dev/null || true
+
+describe: ## Describe a resource: RES=<type>/<name> (or RES=<type> SELECTOR=<label>), NS=<ns> default headlamp
+	@kubectl -n $${NS:-headlamp} describe $${RES:?set RES=<type>/<name>, e.g. RES=pod/headlamp-xxxxx — see make pods} $${SELECTOR:+-l $$SELECTOR}
 
 urls: ## Print URLs and how to authenticate to each UI
 	@echo "Argo CD:  http://$(ARGOCD_HOST)"
