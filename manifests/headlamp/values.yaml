@@ -1,7 +1,7 @@
 # Values for the kubernetes-sigs/headlamp Helm chart (0.44.0), referenced
 # by apps/templates/headlamp-app.yaml as a second Application source so
 # this stays reviewable in Git instead of living inline in the Application.
-replicaCount: 3
+replicaCount: 2
 
 serviceAccount:
   # Pod's own runtime identity — minimal, chart-default. Not used for UI
