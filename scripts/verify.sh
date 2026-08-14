@@ -36,55 +36,92 @@ if kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller -
 else
   bad "ingress-nginx-controller not rolled out"
 fi
+infra_fail="${fail}"
 
-echo "==> Argo CD applications"
-apps_json="$(kubectl get applications -n argocd -o json 2>/dev/null || echo '{"items":[]}')"
-app_count="$(echo "${apps_json}" | jq '.items | length')"
-if [[ "${app_count}" -lt 4 ]]; then
-  bad "expected 4 Applications (root, argocd-ingress, headlamp-rbac, headlamp), found ${app_count}"
-else
-  ok "found ${app_count} Applications"
-fi
-while IFS=$'\t' read -r name sync health; do
-  if [[ "${sync}" == "Synced" && "${health}" == "Healthy" ]]; then
-    ok "Application/${name}: Synced, Healthy"
+# bootstrap.sh only waits for the imperative install steps (kind,
+# ingress-nginx, Argo CD itself) before returning — everything from here
+# down is GitOps-reconciled and converges asynchronously afterward (root
+# Application -> 3 children -> Headlamp chart pull/pod start). Retry these
+# checks for a few minutes before failing instead of catching Argo CD
+# mid-reconciliation on the first pass.
+gitops_converged() {
+  local attempt_fail=0
+
+  echo "==> Argo CD applications"
+  apps_json="$(kubectl get applications -n argocd -o json 2>/dev/null || echo '{"items":[]}')"
+  app_count="$(echo "${apps_json}" | jq '.items | length')"
+  if [[ "${app_count}" -lt 4 ]]; then
+    bad "expected 4 Applications (root, argocd-ingress, headlamp-rbac, headlamp), found ${app_count}"
+    attempt_fail=1
   else
-    bad "Application/${name}: sync=${sync:-<none>} health=${health:-<none>} (expected Synced/Healthy — repo pushed? see README troubleshooting)"
+    ok "found ${app_count} Applications"
   fi
-done < <(echo "${apps_json}" | jq -r '.items[] | [.metadata.name, .status.sync.status, .status.health.status] | @tsv')
+  while IFS=$'\t' read -r name sync health; do
+    if [[ "${sync}" == "Synced" && "${health}" == "Healthy" ]]; then
+      ok "Application/${name}: Synced, Healthy"
+    else
+      bad "Application/${name}: sync=${sync:-<none>} health=${health:-<none>} (expected Synced/Healthy — repo pushed? see README troubleshooting)"
+      attempt_fail=1
+    fi
+  done < <(echo "${apps_json}" | jq -r '.items[] | [.metadata.name, .status.sync.status, .status.health.status] | @tsv')
 
-echo "==> Headlamp workload"
-if kubectl -n headlamp get deployment -l app.kubernetes.io/name=headlamp -o json 2>/dev/null | jq -e '.items[0].status.availableReplicas >= 1' >/dev/null 2>&1; then
-  ok "headlamp Deployment available"
-else
-  bad "headlamp Deployment not available"
-fi
-if kubectl -n headlamp get pods -l app.kubernetes.io/name=headlamp --no-headers 2>/dev/null | awk '{print $3}' | grep -qx Running; then
-  ok "headlamp pod Running"
-else
-  bad "headlamp pod not Running"
-fi
+  echo "==> Headlamp workload"
+  if kubectl -n headlamp get deployment -l app.kubernetes.io/name=headlamp -o json 2>/dev/null | jq -e '.items[0].status.availableReplicas >= 1' >/dev/null 2>&1; then
+    ok "headlamp Deployment available"
+  else
+    bad "headlamp Deployment not available"
+    attempt_fail=1
+  fi
+  if kubectl -n headlamp get pods -l app.kubernetes.io/name=headlamp --no-headers 2>/dev/null | awk '{print $3}' | grep -qx Running; then
+    ok "headlamp pod Running"
+  else
+    bad "headlamp pod not Running"
+    attempt_fail=1
+  fi
 
-echo "==> HTTP endpoints (via ingress-nginx on localhost:80)"
-# Don't `|| echo '000'` here: curl's -w still prints a (partial) code on
-# some connection failures, and the fallback would then append a second
-# '000' after it. Default via parameter expansion instead, which only
-# kicks in when curl printed nothing at all.
-headlamp_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${HEADLAMP_HOST}" http://localhost/ 2>/dev/null)"
-headlamp_code="${headlamp_code:-000}"
-if [[ "${headlamp_code}" == "200" ]]; then
-  ok "http://${HEADLAMP_HOST}/ -> 200"
-else
-  bad "http://${HEADLAMP_HOST}/ -> ${headlamp_code} (expected 200)"
-fi
+  echo "==> HTTP endpoints (via ingress-nginx on localhost:80)"
+  # Don't `|| echo '000'` here: curl's -w still prints a (partial) code on
+  # some connection failures, and the fallback would then append a second
+  # '000' after it. Default via parameter expansion instead, which only
+  # kicks in when curl printed nothing at all.
+  headlamp_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${HEADLAMP_HOST}" http://localhost/ 2>/dev/null)"
+  headlamp_code="${headlamp_code:-000}"
+  if [[ "${headlamp_code}" == "200" ]]; then
+    ok "http://${HEADLAMP_HOST}/ -> 200"
+  else
+    bad "http://${HEADLAMP_HOST}/ -> ${headlamp_code} (expected 200)"
+    attempt_fail=1
+  fi
 
-argocd_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${ARGOCD_HOST}" http://localhost/ 2>/dev/null)"
-argocd_code="${argocd_code:-000}"
-if [[ "${argocd_code}" == "200" ]]; then
-  ok "http://${ARGOCD_HOST}/ -> 200"
-else
-  bad "http://${ARGOCD_HOST}/ -> ${argocd_code} (expected 200)"
-fi
+  argocd_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${ARGOCD_HOST}" http://localhost/ 2>/dev/null)"
+  argocd_code="${argocd_code:-000}"
+  if [[ "${argocd_code}" == "200" ]]; then
+    ok "http://${ARGOCD_HOST}/ -> 200"
+  else
+    bad "http://${ARGOCD_HOST}/ -> ${argocd_code} (expected 200)"
+    attempt_fail=1
+  fi
+
+  return "${attempt_fail}"
+}
+
+max_attempts=18
+interval=10
+attempt=1
+gitops_fail=1
+while true; do
+  if gitops_converged; then
+    gitops_fail=0
+    break
+  fi
+  if [[ "${attempt}" -ge "${max_attempts}" ]]; then
+    break
+  fi
+  echo "  ... not converged yet, retrying in ${interval}s (attempt ${attempt}/${max_attempts})"
+  attempt=$((attempt + 1))
+  sleep "${interval}"
+done
+fail=$((infra_fail || gitops_fail))
 
 echo ""
 if [[ "${fail}" -eq 0 ]]; then
