@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lab:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load versions.env
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source versions.env
+          set +a
+          {
+            echo "CLUSTER_NAME=$CLUSTER_NAME"
+            echo "KIND_VERSION=$KIND_VERSION"
+            echo "KUBECTL_VERSION=$KUBECTL_VERSION"
+            echo "HELM_VERSION=$HELM_VERSION"
+          } >> "$GITHUB_ENV"
+
+      - name: Install kind, kubectl, helm, jq
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y && sudo apt-get install -y jq gettext-base
+          curl -Lo /usr/local/bin/kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x /usr/local/bin/kind
+          curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x /usr/local/bin/kubectl
+          curl -Lo /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo mv "/tmp/linux-amd64/helm" /usr/local/bin/helm
+          kind version; kubectl version --client; helm version; jq --version
+
+      - name: Pin TARGET_REVISION to the commit under test
+        # Argo CD's root Application reads REPO_URL@TARGET_REVISION from
+        # Git (see versions.env / README "Repo-source note"). Left at its
+        # default ("main"), CI would validate whatever is already on the
+        # default branch instead of this commit — pointing it at the exact
+        # SHA under test closes that gap. Only correct for commits that
+        # already exist in REPO_URL (true for pushes and same-repo PRs;
+        # not for PRs from forks).
+        run: |
+          rev="${{ github.event.pull_request.head.sha || github.sha }}"
+          sed -i "s|^TARGET_REVISION=.*|TARGET_REVISION=${rev}|" versions.env
+          grep '^TARGET_REVISION=' versions.env
+
+      - name: make up
+        run: make up
+
+      - name: make verify
+        run: make verify
+
+      - name: Debug on failure
+        if: failure()
+        run: |
+          kubectl get applications -n argocd -o yaml || true
+          kubectl get pods -A || true
+          kubectl -n headlamp describe pod -l app.kubernetes.io/name=headlamp || true
+
+      - name: make down
+        if: always()
+        run: make down

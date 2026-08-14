@@ -1,0 +1,6 @@
+# Defaults so `helm template apps/` works standalone for review/testing.
+# In the running cluster these are overridden by bootstrap/root-app.yaml's
+# helm.valuesObject, which is rendered from versions.env — this file is
+# not the single source of truth, versions.env is.
+repoURL: https://github.com/elveli/kind-argocd-headlamp-lab.git
+targetRevision: main

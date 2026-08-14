@@ -1,0 +1,32 @@
+# Chart version pinned here must match HEADLAMP_CHART_VERSION in
+# versions.env (that file documents it; Argo CD Application specs can't
+# read env files directly, so this is the one place the version is
+# duplicated — bump both together).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: headlamp
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/headlamp/
+      chart: headlamp
+      targetRevision: 0.44.0
+      helm:
+        valueFiles:
+          - $values/manifests/headlamp/values.yaml
+    - repoURL: {{ .Values.repoURL }}
+      targetRevision: {{ .Values.targetRevision }}
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: headlamp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,30 @@
+# Two bindings on purpose, each to its own ServiceAccount — binding both
+# cluster-admin and view to a single SA would just collapse to
+# cluster-admin and defeat the comparison. headlamp-viewer/view is the
+# documented default login (see README); headlamp-admin/cluster-admin is
+# there for convenience when you need to edit things from the UI.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: headlamp-admin
+    namespace: headlamp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-viewer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: headlamp-viewer
+    namespace: headlamp
