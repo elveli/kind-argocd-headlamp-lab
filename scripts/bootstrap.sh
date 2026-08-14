@@ -33,7 +33,13 @@ kubectl apply -f "${INGRESS_NGINX_MANIFEST}"
 # ingress silently never reaches localhost. Patch it back in.
 kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type merge \
   -p '{"spec":{"template":{"spec":{"nodeSelector":{"ingress-ready":"true"}}}}}'
-kubectl -n ingress-nginx wait --for=condition=Complete job -l app.kubernetes.io/component=admission-webhook --timeout=180s
+# ingress-nginx's kind manifest sets ttlSecondsAfterFinished: 0 on these
+# jobs, so they can complete AND get garbage-collected before `kubectl
+# wait` finishes confirming it, which surfaces as a NotFound error rather
+# than success. A retry is enough — the vanish race is a sub-second
+# window, so a real failure (webhook never completing) still fails loudly.
+kubectl -n ingress-nginx wait --for=condition=Complete job -l app.kubernetes.io/component=admission-webhook --timeout=180s \
+  || kubectl -n ingress-nginx wait --for=condition=Complete job -l app.kubernetes.io/component=admission-webhook --timeout=30s
 kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --timeout=180s
 
 echo "==> Argo CD: ${ARGOCD_VERSION} (the one imperative install in this lab)"
