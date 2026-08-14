@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 include versions.env
 export
 
-.PHONY: up down status urls argocd-password headlamp-token argocd-login sync verify logs help
+.PHONY: up down status pods urls argocd-password headlamp-token argocd-login sync verify logs help
 
 up: ## Bring up kind + ingress-nginx + Argo CD, apply the root Application
 	@./scripts/bootstrap.sh
@@ -16,6 +16,12 @@ status: ## Show node, ingress-nginx, and Argo CD Application status
 	@echo "--- nodes ---"; kubectl get nodes 2>/dev/null || echo "no cluster"
 	@echo "--- ingress-nginx ---"; kubectl -n ingress-nginx get pods 2>/dev/null || true
 	@echo "--- applications ---"; kubectl get applications -n argocd 2>/dev/null || true
+
+pods: ## List pods in every namespace this lab manages (argocd, ingress-nginx, headlamp; NS=<ns> to filter to one)
+	@for ns in $${NS:-argocd ingress-nginx headlamp}; do \
+	  echo "--- $$ns ---"; \
+	  kubectl get pods -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
+	done
 
 urls: ## Print URLs and how to authenticate to each UI
 	@echo "Argo CD:  http://$(ARGOCD_HOST)"

@@ -66,14 +66,20 @@ else
 fi
 
 echo "==> HTTP endpoints (via ingress-nginx on localhost:80)"
-headlamp_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${HEADLAMP_HOST}" http://localhost/ || echo '000')"
+# Don't `|| echo '000'` here: curl's -w still prints a (partial) code on
+# some connection failures, and the fallback would then append a second
+# '000' after it. Default via parameter expansion instead, which only
+# kicks in when curl printed nothing at all.
+headlamp_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${HEADLAMP_HOST}" http://localhost/ 2>/dev/null)"
+headlamp_code="${headlamp_code:-000}"
 if [[ "${headlamp_code}" == "200" ]]; then
   ok "http://${HEADLAMP_HOST}/ -> 200"
 else
   bad "http://${HEADLAMP_HOST}/ -> ${headlamp_code} (expected 200)"
 fi
 
-argocd_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${ARGOCD_HOST}" http://localhost/ || echo '000')"
+argocd_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${ARGOCD_HOST}" http://localhost/ 2>/dev/null)"
+argocd_code="${argocd_code:-000}"
 if [[ "${argocd_code}" == "200" ]]; then
   ok "http://${ARGOCD_HOST}/ -> 200"
 else

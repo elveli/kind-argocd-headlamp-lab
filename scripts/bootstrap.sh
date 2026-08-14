@@ -25,6 +25,14 @@ kubectl wait --for=condition=Ready nodes --all --timeout=180s
 
 echo "==> ingress-nginx: ${INGRESS_NGINX_VERSION}"
 kubectl apply -f "${INGRESS_NGINX_MANIFEST}"
+# Upstream's kind manifest only constrains scheduling to
+# kubernetes.io/os=linux — it no longer pins the controller to the
+# ingress-ready=true node. Without that pin the pod can land on a worker,
+# which has no hostPort 80/443 published by Docker (only the control-plane
+# node does, per kind/kind-config.yaml's extraPortMappings), so the
+# ingress silently never reaches localhost. Patch it back in.
+kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type merge \
+  -p '{"spec":{"template":{"spec":{"nodeSelector":{"ingress-ready":"true"}}}}}'
 kubectl -n ingress-nginx wait --for=condition=Complete job -l app.kubernetes.io/component=admission-webhook --timeout=180s
 kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --timeout=180s
 
@@ -39,6 +47,22 @@ kubectl -n argocd patch configmap argocd-cmd-params-cm --type merge \
   -p '{"data":{"server.insecure":"true"}}'
 kubectl -n argocd rollout restart deployment/argocd-server
 kubectl -n argocd rollout status deployment/argocd-server --timeout=180s
+
+# Argo CD's default Ingress health check waits for .status.loadBalancer.ingress
+# to be populated, which never happens on kind (no cloud LB) — Ingress-owning
+# Applications (argocd-ingress, headlamp) would sit at "Progressing" forever
+# despite working fine. Override it: an Ingress that exists is healthy here.
+# argocd-cm is watched and reloaded live, no restart needed.
+echo "==> Argo CD: overriding Ingress health check for non-cloud (no LoadBalancer) clusters"
+kubectl -n argocd patch configmap argocd-cm --type merge -p "$(cat <<'PATCH'
+data:
+  resource.customizations.health.networking.k8s.io_Ingress: |
+    hs = {}
+    hs.status = "Healthy"
+    hs.message = "Ingress considered healthy once created (kind has no cloud LB to populate .status.loadBalancer)"
+    return hs
+PATCH
+)"
 
 echo "==> applying root Application (app-of-apps) — REPO_URL=${REPO_URL} TARGET_REVISION=${TARGET_REVISION}"
 envsubst < bootstrap/root-app.yaml | kubectl apply -f -
