@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 include versions.env
 export
 
-.PHONY: up down status pods urls argocd-password headlamp-token argocd-login sync verify logs help
+.PHONY: up down status pods deployments services ports urls argocd-password headlamp-token argocd-login sync verify logs help
 
 up: ## Bring up kind + ingress-nginx + Argo CD, apply the root Application
 	@./scripts/bootstrap.sh
@@ -22,6 +22,26 @@ pods: ## List pods in every namespace this lab manages (argocd, ingress-nginx, h
 	  echo "--- $$ns ---"; \
 	  kubectl get pods -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
 	done
+
+deployments: ## List deployments in every namespace this lab manages (argocd, ingress-nginx, headlamp; NS=<ns> to filter to one)
+	@for ns in $${NS:-argocd ingress-nginx headlamp}; do \
+	  echo "--- $$ns ---"; \
+	  kubectl get deployments -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
+	done
+
+services: ## List services in every namespace this lab manages (argocd, ingress-nginx, headlamp; NS=<ns> to filter to one)
+	@for ns in $${NS:-argocd ingress-nginx headlamp}; do \
+	  echo "--- $$ns ---"; \
+	  kubectl get services -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
+	done
+
+ports: ## Show the host -> kind node -> ingress-nginx -> Ingress route port chain
+	@echo "--- host -> kind node (docker) ---"
+	@docker port $(CLUSTER_NAME)-control-plane 2>/dev/null || echo "  (cluster not found)"
+	@echo "--- ingress-nginx controller service ---"
+	@kubectl -n ingress-nginx get svc ingress-nginx-controller -o wide 2>/dev/null || true
+	@echo "--- ingress routes ---"
+	@kubectl get ingress -A 2>/dev/null || true
 
 urls: ## Print URLs and how to authenticate to each UI
 	@echo "Argo CD:  http://$(ARGOCD_HOST)"
