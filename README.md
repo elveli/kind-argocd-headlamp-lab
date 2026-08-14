@@ -11,6 +11,20 @@ Argo CD install itself is declared in Git and reconciled by Argo CD, with
 No cloud resources, no cost beyond local CPU/RAM/disk. Runs entirely in
 Docker containers on your machine.
 
+## Table of contents
+
+- [What this demonstrates](#what-this-demonstrates)
+- [Prerequisites](#prerequisites)
+- [Repo-source note (read this before `make up`)](#repo-source-note-read-this-before-make-up)
+- [Quickstart](#quickstart)
+- [Architecture](#architecture)
+- [Logging in](#logging-in)
+- [Demos](#demos)
+- [Verification](#verification)
+- [Troubleshooting](#troubleshooting)
+- [Teardown](#teardown)
+- [Repo layout](#repo-layout)
+
 ## What this demonstrates
 
 - Bootstrapping Argo CD with one imperative install, then handing off to
