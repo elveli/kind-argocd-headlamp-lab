@@ -17,6 +17,7 @@ Docker containers on your machine.
 - [Prerequisites](#prerequisites)
 - [Repo-source note (read this before `make up`)](#repo-source-note-read-this-before-make-up)
 - [Quickstart](#quickstart)
+- [Make targets](#make-targets)
 - [Architecture](#architecture)
 - [Logging in](#logging-in)
 - [Demos](#demos)
@@ -87,6 +88,30 @@ make urls      # prints both UIs' URLs and how to authenticate
 
 `make up` is idempotent — re-running it against an existing cluster
 converges rather than erroring.
+
+## Make targets
+
+`make help` prints this same list from the Makefile's own comments. Knobs
+are env vars set on the command line, e.g. `NS=argocd make pods`.
+
+| Target | Knobs | What it does |
+|---|---|---|
+| `up` | | kind + ingress-nginx + Argo CD, apply the root Application |
+| `down` | | Delete the kind cluster (no leftovers) |
+| `status` | | Node, ingress-nginx, and Argo CD Application status |
+| `pods` | `NS=<ns>` (default: `argocd ingress-nginx headlamp`) | List pods per managed namespace |
+| `deployments` | `NS=<ns>` (default: `argocd ingress-nginx headlamp`) | List deployments per managed namespace |
+| `services` | `NS=<ns>` (default: `argocd ingress-nginx headlamp`) | List services per managed namespace |
+| `ports` | | host -> kind node -> ingress-nginx -> Ingress port chain |
+| `describe` | `RES=<type>/<name>` (required, or `RES=<type>` + `SELECTOR=<label>`), `NS=<ns>` (default: `headlamp`) | `kubectl describe` a resource — see [Troubleshooting](#troubleshooting) |
+| `urls` | | URLs and how to authenticate to each UI |
+| `argocd-password` | | Print the Argo CD initial admin password |
+| `headlamp-token` | `SA=<serviceaccount>` (default: `headlamp-viewer`) | Print a short-lived Headlamp login token |
+| `argocd-login` | | Log the `argocd` CLI in against the local ingress |
+| `sync` | | Force an immediate refresh+sync of all Applications |
+| `verify` | | Run `scripts/verify.sh` |
+| `logs` | | Tail Argo CD server + Headlamp logs together |
+| `help` | | Show target list |
 
 ## Architecture
 
