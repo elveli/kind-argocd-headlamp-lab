@@ -198,6 +198,18 @@ kubectl -n argocd get application root -o jsonpath='{.status.conditions}'
 ```
 Push the repo (or fix `REPO_URL`/`TARGET_REVISION`) and re-run `make sync`.
 
+**Want the detail behind an Application's Summary/Sources/Events tabs in
+the Argo CD UI, from the CLI instead?**
+```sh
+RES=application/headlamp NS=argocd make describe
+```
+`describe` defaults `NS` to `headlamp` (for workload resources), so
+Applications — which live in `argocd` — need `NS=argocd` explicitly. Covers
+annotations, sources, sync policy, health/sync status, and Events in one
+shot. For raw untruncated fields (e.g. full annotation values) or the
+Manifest tab's target state: `kubectl get application headlamp -n argocd -o
+yaml`.
+
 **Headlamp token stopped working.** `kubectl create token` tokens expire
 (~1h default). Re-run `make headlamp-token`; there's no persistent
 credential by design.
