@@ -21,6 +21,7 @@ Docker containers on your machine.
 - [Architecture](#architecture)
 - [Logging in](#logging-in)
 - [Demos](#demos)
+- [Adding a second Headlamp instance (`headlamp-dev`)](#adding-a-second-headlamp-instance-headlamp-dev)
 - [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
 - [Teardown](#teardown)
@@ -30,7 +31,7 @@ Docker containers on your machine.
 
 - Bootstrapping Argo CD with one imperative install, then handing off to
   GitOps for everything else (app-of-apps: a single root `Application` owns
-  three child `Application`s).
+  four child `Application`s).
 - `syncPolicy.automated` with `prune: true` and `selfHeal: true` — delete a
   resource by hand and watch Argo CD put it back; remove it from Git and
   watch Argo CD delete it from the cluster.
@@ -190,6 +191,54 @@ make sync
 kubectl get clusterrolebinding headlamp-admin headlamp-viewer   # one is gone
 ```
 
+## Adding a second Headlamp instance (`headlamp-dev`)
+
+A second Headlamp release, in its own `headlamp-dev` namespace, for poking
+at chart/value changes without touching the primary `headlamp` release.
+It's GitOps-managed exactly like the primary release — a 4th child
+`Application` alongside `headlamp`, `headlamp-rbac`, `argocd-ingress`:
+
+- [`apps/templates/headlamp-dev-app.yaml`](apps/templates/headlamp-dev-app.yaml)
+  — the `Application`, same multi-source pattern as
+  [`headlamp-app.yaml`](apps/templates/headlamp-app.yaml) (chart pulled
+  from upstream, values kept in a separate reviewable Git file rather than
+  inlined).
+- [`manifests/headlamp-dev/values.yaml`](manifests/headlamp-dev/values.yaml)
+  — the chart values. Same as
+  [`manifests/headlamp/values.yaml`](manifests/headlamp/values.yaml)
+  except the ingress host: `headlamp-dev.localtest.me` (`headlamp.localtest.me`
+  is already claimed by the primary release), and `clusterRoleBinding.create:
+  false` with no login RBAC wired up for the namespace — unlike `headlamp`,
+  there's no `manifests/headlamp-dev/rbac/`, so there's no ready-made
+  `make headlamp-token`-style identity to log in with.
+
+Commit both files and push — `root` picks up the new template and Argo CD
+creates + syncs `headlamp-dev` automatically, same as any other change
+under `apps/templates/`. No manual `kubectl apply` needed.
+
+Two things to know once it's up:
+- `make pods` / `make deployments` / `make services` default to `argocd
+  ingress-nginx headlamp` and won't show it — pass `NS=headlamp-dev`.
+- It shows up at http://argocd.localtest.me/applications as a standalone
+  entry (not nested under `root` in the tree view — `root` owns it the same
+  way it owns the other three, but the UI only nests an `Application`'s
+  *own* managed resources under it, not sibling Applications).
+
+Browse to http://headlamp-dev.localtest.me once `kubectl -n headlamp-dev
+get pods` shows the pod `Ready`.
+
+**Teardown:** delete `apps/templates/headlamp-dev-app.yaml` and
+`manifests/headlamp-dev/`, commit, push — `prune: true` on `root` removes
+the `Application`, which cascades to its own resources the same way.
+
+**If you'd rather not touch Git at all** (a throwaway instance, not meant
+to persist or go through GitOps): `helm install headlamp-dev
+headlamp/headlamp --version 0.45.0 --namespace headlamp-dev
+--create-namespace -f manifests/headlamp-dev/values.yaml` works too — but
+don't mix this with the committed `Application` against the same release
+name/namespace; Argo CD won't adopt resources a plain `helm install`
+created, and vice versa.
+
 ## Verification
 
 `make verify` (`scripts/verify.sh`) checks, and fails loudly if any of
@@ -269,10 +318,13 @@ kind-argocd-headlamp-lab/
 ├── bootstrap/
 │   ├── root-app.yaml           # the ONE Application applied by script
 │   └── argocd-ingress/         # Ingress for argocd.localtest.me (GitOps-owned)
-├── apps/                       # Helm chart rendering the 3 child Applications
-├── manifests/headlamp/
-│   ├── rbac/                   # 2 ServiceAccounts + 2 ClusterRoleBindings
-│   └── values.yaml             # Helm values for the upstream Headlamp chart
+├── apps/                       # Helm chart rendering the 4 child Applications
+├── manifests/
+│   ├── headlamp/
+│   │   ├── rbac/                # 2 ServiceAccounts + 2 ClusterRoleBindings
+│   │   └── values.yaml          # Helm values for the upstream Headlamp chart
+│   └── headlamp-dev/
+│       └── values.yaml          # Helm values for the second (dev) Headlamp instance
 ├── docs/gitops-notes.md
 └── .github/workflows/ci.yaml   # make up -> verify -> down on a Linux runner
 ```

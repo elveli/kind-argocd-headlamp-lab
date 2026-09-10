@@ -1,0 +1,42 @@
+# Values for the second Headlamp instance (headlamp-dev), referenced by
+# apps/templates/headlamp-dev-app.yaml. Mirrors manifests/headlamp/values.yaml
+# with a distinct ingress host — headlamp.localtest.me is already claimed
+# by the primary release.
+replicaCount: 1
+
+image:
+  registry: ghcr.io
+  repository: headlamp-k8s/headlamp
+  # tag intentionally unset — chart upgrades (bumped in versions.env) then
+  # pull the image matching that chart's own appVersion.
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+serviceAccount:
+  create: true
+  name: ""
+
+clusterRoleBinding:
+  # Same rationale as the primary release: chart default binds its own
+  # ServiceAccount to cluster-admin; disabled since there's no login RBAC
+  # wired up for this namespace (see README — headlamp-dev has none).
+  create: false
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - host: headlamp-dev.localtest.me
+      paths:
+        - path: /
+          type: Prefix
