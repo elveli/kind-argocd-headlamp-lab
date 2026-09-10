@@ -65,7 +65,7 @@ argocd-login: ## Log the argocd CLI in against the local ingress (requires the a
 	  --password "$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
 
 sync: ## Force an immediate refresh+sync of all Applications (auto-sync is already on; this skips the poll interval)
-	@for a in root argocd-ingress headlamp-rbac headlamp; do \
+	@for a in $$(kubectl -n argocd get applications -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do \
 	  kubectl -n argocd annotate application $$a argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true; \
 	done
 	@echo "requested hard refresh on all Applications"
