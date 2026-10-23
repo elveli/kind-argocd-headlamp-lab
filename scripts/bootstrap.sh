@@ -12,6 +12,9 @@ set -a
 source versions.env
 set +a
 
+# Pin every kubectl call to the lab cluster, regardless of current context.
+kubectl() { command kubectl --context "kind-${CLUSTER_NAME}" "$@"; }
+
 "$ROOT_DIR/scripts/preflight.sh"
 
 echo "==> kind cluster: ${CLUSTER_NAME}"

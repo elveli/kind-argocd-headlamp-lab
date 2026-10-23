@@ -4,6 +4,11 @@ SHELL := /usr/bin/env bash
 include versions.env
 export
 
+# Every target talks to the lab cluster explicitly, never to whatever
+# kubectl context happens to be current (Docker Desktop, Rancher Desktop
+# etc. can switch it out from under you).
+KUBECTL := kubectl --context kind-$(CLUSTER_NAME)
+
 .PHONY: up down status pods deployments services ports describe urls argocd-password headlamp-token argocd-login sync verify logs help
 
 up: ## Bring up kind + ingress-nginx + Argo CD, apply the root Application
@@ -13,38 +18,38 @@ down: ## Delete the kind cluster (no leftovers)
 	@./scripts/teardown.sh
 
 status: ## Show node, ingress-nginx, and Argo CD Application status
-	@echo "--- nodes ---"; kubectl get nodes 2>/dev/null || echo "no cluster"
-	@echo "--- ingress-nginx ---"; kubectl -n ingress-nginx get pods 2>/dev/null || true
-	@echo "--- applications ---"; kubectl get applications -n argocd 2>/dev/null || true
+	@echo "--- nodes ---"; $(KUBECTL) get nodes 2>/dev/null || echo "no cluster"
+	@echo "--- ingress-nginx ---"; $(KUBECTL) -n ingress-nginx get pods 2>/dev/null || true
+	@echo "--- applications ---"; $(KUBECTL) get applications -n argocd 2>/dev/null || true
 
 pods: ## List pods in every namespace this lab manages (argocd, ingress-nginx, headlamp; NS=<ns> to filter to one)
 	@for ns in $${NS:-argocd ingress-nginx headlamp}; do \
 	  echo "--- $$ns ---"; \
-	  kubectl get pods -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
+	  $(KUBECTL) get pods -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
 	done
 
 deployments: ## List deployments in every namespace this lab manages (argocd, ingress-nginx, headlamp; NS=<ns> to filter to one)
 	@for ns in $${NS:-argocd ingress-nginx headlamp}; do \
 	  echo "--- $$ns ---"; \
-	  kubectl get deployments -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
+	  $(KUBECTL) get deployments -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
 	done
 
 services: ## List services in every namespace this lab manages (argocd, ingress-nginx, headlamp; NS=<ns> to filter to one)
 	@for ns in $${NS:-argocd ingress-nginx headlamp}; do \
 	  echo "--- $$ns ---"; \
-	  kubectl get services -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
+	  $(KUBECTL) get services -n $$ns -o wide 2>/dev/null || echo "  (namespace not found)"; \
 	done
 
 ports: ## Show the host -> kind node -> ingress-nginx -> Ingress route port chain
 	@echo "--- host -> kind node (docker) ---"
 	@docker port $(CLUSTER_NAME)-control-plane 2>/dev/null || echo "  (cluster not found)"
 	@echo "--- ingress-nginx controller service ---"
-	@kubectl -n ingress-nginx get svc ingress-nginx-controller -o wide 2>/dev/null || true
+	@$(KUBECTL) -n ingress-nginx get svc ingress-nginx-controller -o wide 2>/dev/null || true
 	@echo "--- ingress routes ---"
-	@kubectl get ingress -A 2>/dev/null || true
+	@$(KUBECTL) get ingress -A 2>/dev/null || true
 
 describe: ## Describe a resource: RES=<type>/<name> (or RES=<type> SELECTOR=<label>), NS=<ns> default headlamp
-	@kubectl -n $${NS:-headlamp} describe $${RES:?set RES=<type>/<name>, e.g. RES=pod/headlamp-xxxxx — see make pods} $${SELECTOR:+-l $$SELECTOR}
+	@$(KUBECTL) -n $${NS:-headlamp} describe $${RES:?set RES=<type>/<name>, e.g. RES=pod/headlamp-xxxxx — see make pods} $${SELECTOR:+-l $$SELECTOR}
 
 urls: ## Print URLs and how to authenticate to each UI
 	@echo "Argo CD:  http://$(ARGOCD_HOST)"
@@ -54,19 +59,19 @@ urls: ## Print URLs and how to authenticate to each UI
 	@echo "  token (cluster-admin):      SA=headlamp-admin make headlamp-token"
 
 argocd-password: ## Print the Argo CD initial admin password
-	@kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+	@$(KUBECTL) -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
 headlamp-token: ## Print a short-lived Headlamp login token (SA=headlamp-viewer by default)
-	@kubectl -n headlamp create token $${SA:-headlamp-viewer}
+	@$(KUBECTL) -n headlamp create token $${SA:-headlamp-viewer}
 
 argocd-login: ## Log the argocd CLI in against the local ingress (requires the argocd CLI)
 	@command -v argocd >/dev/null 2>&1 || { echo "argocd CLI not found: https://argo-cd.readthedocs.io/en/stable/cli_installation/"; exit 1; }
 	@argocd login $(ARGOCD_HOST) --insecure --grpc-web --username admin \
-	  --password "$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
+	  --password "$$($(KUBECTL) -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
 
 sync: ## Force an immediate refresh+sync of all Applications (auto-sync is already on; this skips the poll interval)
-	@for a in $$(kubectl -n argocd get applications -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do \
-	  kubectl -n argocd annotate application $$a argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true; \
+	@for a in $$($(KUBECTL) -n argocd get applications -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do \
+	  $(KUBECTL) -n argocd annotate application $$a argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true; \
 	done
 	@echo "requested hard refresh on all Applications"
 
@@ -75,8 +80,8 @@ verify: ## Run scripts/verify.sh
 
 logs: ## Tail Argo CD server and Headlamp logs together (Ctrl-C to stop)
 	@trap 'kill 0' EXIT INT TERM; \
-	kubectl -n argocd logs deploy/argocd-server -f --prefix=true & \
-	kubectl -n headlamp logs deploy/headlamp -f --prefix=true & \
+	$(KUBECTL) -n argocd logs deploy/argocd-server -f --prefix=true & \
+	$(KUBECTL) -n headlamp logs deploy/headlamp -f --prefix=true & \
 	wait
 
 help: ## Show this help

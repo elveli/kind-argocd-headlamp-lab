@@ -12,6 +12,9 @@ set -a
 source versions.env
 set +a
 
+# Pin every kubectl call to the lab cluster, regardless of current context.
+kubectl() { command kubectl --context "kind-${CLUSTER_NAME}" "$@"; }
+
 fail=0
 ok()   { echo "  OK   $*"; }
 bad()  { echo "  FAIL $*" >&2; fail=1; }
