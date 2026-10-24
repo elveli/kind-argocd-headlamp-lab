@@ -65,8 +65,7 @@ The Headlamp chart is the exception: Argo CD reads its version from
 `targetRevision` in
 [`apps/templates/headlamp-app.yaml`](apps/templates/headlamp-app.yaml) and
 [`apps/templates/headlamp-dev-app.yaml`](apps/templates/headlamp-dev-app.yaml),
-so bump it there and merge to `main`. `HEADLAMP_CHART_VERSION` in
-`versions.env` only documents the main release's version.
+so bump it there and merge to `main`.
 
 ## Repo-source note (read this before `make up`)
 
@@ -313,7 +312,7 @@ clusters. `kind delete cluster` already scopes correctly to just this one.
 ```
 kind-argocd-headlamp-lab/
 ├── Makefile                    # up/down/status/urls/verify/... entrypoints
-├── versions.env                # every pinned version + REPO_URL/TARGET_REVISION
+├── versions.env                # pinned versions (not the Headlamp chart) + REPO_URL/TARGET_REVISION
 ├── kind/kind-config.yaml       # 1 control-plane + 2 workers, envsubst'd at bootstrap
 ├── scripts/
 │   ├── preflight.sh            # tool + Docker daemon checks

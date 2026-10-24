@@ -1,6 +1,5 @@
-# The chart's targetRevision below is what actually gets deployed. Argo CD
-# Application specs can't read env files, so HEADLAMP_CHART_VERSION in
-# versions.env only documents it — bump both together.
+# The chart's targetRevision below is the one place the primary Headlamp
+# release's version is set — bump it here and merge to main.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
