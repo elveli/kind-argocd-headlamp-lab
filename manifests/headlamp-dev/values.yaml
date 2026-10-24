@@ -7,8 +7,9 @@ replicaCount: 1
 image:
   registry: ghcr.io
   repository: headlamp-k8s/headlamp
-  # tag intentionally unset — chart upgrades (bumped in versions.env) then
-  # pull the image matching that chart's own appVersion.
+  # tag intentionally unset — the image then follows the chart version
+  # (targetRevision in apps/templates/headlamp-dev-app.yaml), using the
+  # chart's own appVersion.
 
 resources:
   requests:
