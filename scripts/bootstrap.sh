@@ -60,6 +60,10 @@ kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --ti
 echo "==> Argo CD: ${ARGOCD_VERSION} (the one imperative install in this lab)"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n argocd --server-side --force-conflicts -f "${ARGOCD_INSTALL_MANIFEST}"
+if [[ -n "${ARGOCD_REDIS_IMAGE:-}" ]]; then
+  echo "    overriding argocd-redis image: ${ARGOCD_REDIS_IMAGE}"
+  kubectl -n argocd set image deployment/argocd-redis redis="${ARGOCD_REDIS_IMAGE}"
+fi
 kubectl -n argocd wait --for=condition=Available deployment --all --timeout=300s
 kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
 
