@@ -1,7 +1,7 @@
 # Second Headlamp instance in its own namespace, for poking at chart/value
 # changes without touching the primary `headlamp` release. The chart's
-# targetRevision below is independent of headlamp-app.yaml and of
-# versions.env — bump it here to try a new chart version on dev first.
+# targetRevision below is independent of headlamp-app.yaml — bump it here
+# to try a new chart version on dev first.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
