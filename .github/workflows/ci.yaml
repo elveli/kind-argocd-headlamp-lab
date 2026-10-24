@@ -51,6 +51,17 @@ jobs:
           sed -i "s|^TARGET_REVISION=.*|TARGET_REVISION=${rev}|" versions.env
           grep '^TARGET_REVISION=' versions.env
 
+      - name: Pull argocd-redis from mirror.gcr.io instead of ECR Public
+        # Argo CD's install manifest pulls redis from public.ecr.aws with
+        # imagePullPolicy: Always; anonymous pulls from shared runner IPs
+        # get throttled (ImagePullBackOff, make up times out). mirror.gcr.io
+        # is Google's Docker Hub cache — same image, pinned to the digest
+        # upstream ships for redis:8.2.3-alpine. Bump alongside ARGOCD_VERSION.
+        run: |
+          img="mirror.gcr.io/library/redis:8.2.3-alpine@sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba"
+          sed -i "s|^ARGOCD_REDIS_IMAGE=.*|ARGOCD_REDIS_IMAGE=${img}|" versions.env
+          grep '^ARGOCD_REDIS_IMAGE=' versions.env
+
       - name: make up
         run: make up
 
