@@ -59,9 +59,14 @@ Docker containers on your machine.
 above and fails with an install hint if anything's missing or Docker isn't
 reachable.
 
-Every pinned version (kind node image, ingress-nginx, Argo CD, Headlamp
-chart) lives in [`versions.env`](versions.env) — bump one there and re-run
-`make up`.
+Every pinned version (kind node image, ingress-nginx, Argo CD) lives in
+[`versions.env`](versions.env) — bump one there and re-run `make up`.
+The Headlamp chart is the exception: Argo CD reads its version from
+`targetRevision` in
+[`apps/templates/headlamp-app.yaml`](apps/templates/headlamp-app.yaml) and
+[`apps/templates/headlamp-dev-app.yaml`](apps/templates/headlamp-dev-app.yaml),
+so bump it there and merge to `main`. `HEADLAMP_CHART_VERSION` in
+`versions.env` only documents the main release's version.
 
 ## Repo-source note (read this before `make up`)
 
